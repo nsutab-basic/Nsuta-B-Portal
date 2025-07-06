@@ -70,7 +70,7 @@
 
     const user = JSON.parse(localStorage.getItem("activeUser"));
     if (!user || (user.role !== "admin" && user.role !== "headteacher")) {
-      alert("Access denied. Admins or headteachers only.");
+      alert("Access denied.");
       window.location.href = "index.html";
     }
 
@@ -117,13 +117,6 @@
     async function toggleUser(userId, currentlyActive) {
       await supabase.from("users").update({ active: !currentlyActive }).eq("id", userId);
       loadUsers();
-    }
-
-    async function loadTerm() {
-      const { data } = await supabase.from("settings").select("current_term").limit(1).single();
-      if (data) {
-        document.getElementById("termSelect").value = data.current_term;
-      }
     }
 
     async function updateTerm() {
@@ -175,9 +168,14 @@
       } else {
         statusBox.textContent = "✅ User created successfully.";
         statusBox.style.color = "green";
-      document.getElementById("newName").value = "";
-      document.getElementById("newUsername").value = "";
+        document.getElementById("newName").value = "";
+        document.getElementById("newUsername").value = "";
+        document.getElementById("newClass").value = "";
+        document.getElementById("newPin").value = "";
+        loadUsers();
+      }
     }
+
     function logout() {
       localStorage.removeItem("activeUser");
       sessionStorage.clear();
@@ -186,7 +184,6 @@
 
     window.onload = () => {
       loadUsers();
-      loadTerm();
     };
   </script>
 </body>
