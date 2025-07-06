@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Student Dashboard | Nsuta Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial; background: #f9fbff; padding: 30px; max-width: 1000px; margin: auto; }
+    h2 { color: #0077cc; margin-bottom: 20px; }
+    section { margin-bottom: 40px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; font-size: 14px; }
+    th { background-color: #e0ecf9; }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    button { margin-top: 10px; padding: 8px 16px; background: #0077cc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #005fa3; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .pin-box { margin-top: 20px; max-width: 400px; background: #fff; padding: 20px; border-radius: 6px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+    .pin-box input { width: 100%; padding: 10px; margin-top: 8px; font-size: 14px; }
+    .status { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <h2>🎓 Welcome, <span id="studentName">Student</span></h2>
+    <button onclick="logout()" style="background: #dc3545;">🚪 Logout</button>
+  </div>
+
+  <section>
+    <h3>📄 Report Card</h3>
+    <button onclick="printReport()">🖨️ Print / Download Report</button>
+    <table id="reportTable" style="display:none;">
+      <thead>
+        <tr><th>Subject</th><th>SBA (50)</th><th>Exam (50)</th><th>Total (100)</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="reportStatus">Loading report...</div>
+  </section>
+
+  <section>
+    <h3>📎 Assignments</h3>
+    <button onclick="downloadAllAssignments()">⬇️ Download All</button>
+    <ul id="assignmentList">Loading assignments...</ul>
+  </section>
+
+  <section class="pin-box">
+    <h3>🔑 Change PIN</h3>
+    <label>Current PIN:</label>
+    <input type="password" id="currentPin" placeholder="Enter current PIN" />
+    <label>New PIN (4–6 digits):</label>
+    <input type="password" id="newPin" placeholder="Enter new PIN" maxlength="6" />
+    <button onclick="changePin()">🔄 Update PIN</button>
+    <div class="status" id="pinStatus"></div>
+  </section>
+
+  <script>
+    const supabase = window.supabase.createClient(
+      "https://srdfkpesgvokynhabadi.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyZGZrcGVzZ3Zva3luaGFiYWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3OTgyMTgsImV4cCI6MjA2NzM3NDIxOH0.8YRYisc3Azy1gt0J_lp7xbsuEbaWkHPh5kEdJMuJFl4"
+    );
+
+    const student = JSON.parse(localStorage.getItem("activeUser")) || {};
+    if (!student || student.role !== "student") {
+      alert("Access denied.");
+      window.location.href = "index.html";
+    }
+
+    document.getElementById("studentName").textContent = student.full_name || "Student";
+    const term = localStorage.getItem("currentTerm") || "Term 2";
+    let assignmentLinks = [];
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>"'`]/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;'
+      }[char]));
+    }
+
+    async function loadReport() {
+      const { data, error } = await supabase
+        .from("merged_scores")
+        .select("*")
+        .eq("student_id", student.id)
+        .eq("term", term);
+
+      const table = document.getElementById("reportTable");
+      const tbody = table.querySelector("tbody");
+      const status = document.getElementById("reportStatus");
+
+      if (error || !data || data.length === 0) {
+        status.textContent = "⚠️ No report card found for this term.";
+        return;
+      }
+
+      tbody.innerHTML = "";
+      data.forEach(row => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${row.subject}</td>
+            <td>${row.sba_scaled ?? "-"}</td>
+            <td>${row.exam_scaled ?? "-"}</td>
+            <td>${row.total ?? "-"}</td>
+          </tr>
+        `;
+      });
+
+      table.style.display = "table";
+      status.textContent = `✅ Report for ${term} loaded.`;
+    }
+
+    async function loadAssignments() {
+      const { data, error } = await supabase
+        .from("assignments")
+        .select("*")
+        .eq("class", student.class);
+
+      const list = document.getElementById("assignmentList");
+      assignmentLinks = [];
+
+      if (error || !data || data.length === 0) {
+        list.innerHTML = "<li>No assignments found.</li>";
+        return;
+      }
+
+      list.innerHTML = "";
+      data.forEach(a => {
+        assignmentLinks.push(a.file_url);
+        list.innerHTML += `<li><strong>${a.subject}:</strong> ${a.title} — <a href="${a.file_url}" target="_blank">Download</a></li>`;
+      });
+    }
+
+    function printReport() {
+      const table = document.getElementById("reportTable");
+      if (table.style.display === "none") {
+        alert("⚠️ No report to print.");
+        return;
+      }
+
+      const reportHTML = table.outerHTML;
+      const safeName = escapeHTML(student.full_name || "Student");
+
+      const win = window.open("", "", "width=800,height=600");
+      win.document.write(`<html><head><title>Report Card</title></head><body>`);
+      win.document.write(`<h2>Report Card - ${safeName}</h2>`);
+      win.document.write(reportHTML);
+      win.document.write("</body></html>");
+      win.document.close();
+      win.print();
+    }
+
+    function downloadAllAssignments() {
+      if (assignmentLinks.length === 0) {
+        alert("⚠️ No assignments to download.");
+        return;
+      }
+      assignmentLinks.forEach(link => window.open(link, "_blank"));
+    }
+
+    async function changePin() {
+      const currentPin = document.getElementById("currentPin").value.trim();
+      const newPin = document.getElementById("newPin").value.trim();
+      const statusBox = document.getElementById("pinStatus");
+
+      if (!currentPin || !newPin) {
+        statusBox.textContent = "❌ Please fill in both fields.";
+        statusBox.style.color = "crimson";
+        return;
+      }
+
+      if (currentPin !== student.pin) {
+        statusBox.textContent = "❌ Current PIN is incorrect.";
+        statusBox.style.color = "crimson";
+        return;
+      }
+
+      if (!/^\d{4,6}$/.test(newPin)) {
+        statusBox.textContent = "❌ New PIN must be 4 to 6 digits.";
+        statusBox.style.color = "crimson";
+        return;
+      }
+
+      const { error } = await supabase
+        .from("users")
+        .update({ pin: newPin })
+        .eq("id", student.id);
+
+      if (error) {
+               statusBox.textContent = "❌ Failed to update PIN.";
+        statusBox.style.color = "crimson";
+      } else {
+        statusBox.textContent = "✅ PIN updated successfully.";
+        statusBox.style.color = "green";
+        student.pin = newPin;
+        localStorage.setItem("activeUser", JSON.stringify(student));
+        document.getElementById("currentPin").value = "";
+        document.getElementById("newPin").value = "";
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem("activeUser");
+      sessionStorage.clear();
+      window.location.href = "index.html";
+    }
+
+    window.onload = () => {
+      loadReport();
+      loadAssignments();
+    };
+  </script>
+</body>
+</html>

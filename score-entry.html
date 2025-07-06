@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Exam Score Entry | Nsuta Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="guard.js"></script>
+  <style>
+    body { font-family: Arial; background: #f9fbff; padding: 30px; max-width: 1000px; margin: auto; }
+    h2 { color: #0077cc; margin-bottom: 20px; }
+    select, input { padding: 8px; font-size: 14px; margin: 5px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; font-size: 14px; }
+    th { background-color: #e0ecf9; }
+    button { margin-top: 20px; padding: 10px 20px; background: #0077cc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #005fa3; }
+    .status { margin-top: 15px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>🧮 Exam Score Entry</h2>
+
+  <label>Select Subject:
+    <select id="subjectSelect">
+      <option value="">-- Select Subject --</option>
+      <option>Math</option>
+      <option>English</option>
+      <option>Science</option>
+      <option>Computing</option>
+      <option>RME</option>
+      <option>Social Studies</option>
+      <option>Twi</option>
+      <option>Career Tech</option>
+      <option>Creative Art</option>
+    </select>
+  </label>
+
+  <table id="examTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Name</th><th>Raw Score (100)</th><th>Scaled (50)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <button onclick="saveExam()">✅ Save Scores</button>
+  <div class="status" id="statusBox"></div>
+
+  <script>
+    const supabase = window.supabase.createClient(
+      "https://srdfkpesgvokynhabadi.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyZGZrcGVzZ3Zva3luaGFiYWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3OTgyMTgsImV4cCI6MjA2NzM3NDIxOH0.8YRYisc3Azy1gt0J_lp7xbsuEbaWkHPh5kEdJMuJFl4" // Replace with your anon key
+    );
+
+    const user = JSON.parse(localStorage.getItem("activeUser")) || {};
+    const className = user.class;
+    const teacherId = user.id;
+    const teacherName = user.displayName;
+    const term = localStorage.getItem("currentTerm") || "Term 2";
+
+    const subjectSelect = document.getElementById("subjectSelect");
+    const table = document.getElementById("examTable");
+    const tbody = table.querySelector("tbody");
+    const statusBox = document.getElementById("statusBox");
+
+    subjectSelect.addEventListener("change", async () => {
+      const subject = subjectSelect.value;
+      if (!subject) return;
+
+      const { data: students, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("role", "student")
+        .eq("class", className);
+
+      if (error || !students.length) {
+        tbody.innerHTML = "<tr><td colspan='3'>No students found.</td></tr>";
+        table.style.display = "table";
+        return;
+      }
+
+      tbody.innerHTML = "";
+      students.forEach(s => {
+        tbody.innerHTML += `
+          <tr data-id="${s.id}" data-name="${s.full_name}">
+            <td>${s.full_name}</td>
+            <td><input type="number" min="0" max="100" class="raw" /></td>
+            <td class="scaled">0</td>
+          </tr>
+        `;
+      });
+
+      table.style.display = "table";
+      addScoreListeners();
+    });
+
+    function addScoreListeners() {
+      const inputs = document.querySelectorAll(".raw");
+      inputs.forEach(input => {
+        input.addEventListener("input", () => {
+          const row = input.closest("tr");
+          const raw = parseFloat(input.value) || 0;
+          const scaled = Math.round((raw / 100) * 50);
+          row.querySelector(".scaled").textContent = scaled;
+        });
+      });
+    }
+
+    async function saveExam() {
+      const subject = subjectSelect.value;
+      if (!subject) return alert("Please select a subject.");
+
+      const rows = tbody.querySelectorAll("tr");
+      const entries = [];
+
+      rows.forEach(row => {
+        const raw = parseFloat(row.querySelector(".raw").value) || 0;
+        const scaled = Math.round((raw / 100) * 50);
+
+        entries.push({
+          student_id: row.dataset.id,
+          student_name: row.dataset.name,
+          class: className,
+          subject,
+          score: raw,
+          term,
+          teacher_id: teacherId,
+          teacher_name: teacherName
+        });
+      });
+
+      const { error } = await supabase.from("examscore").upsert(entries);
+
+      if (error) {
+        statusBox.textContent = "❌ Failed to save scores: " + error.message;
+        statusBox.style.color = "crimson";
+      } else {
+        statusBox.textContent = "✅ Exam scores saved successfully.";
+        statusBox.style.color = "green";
+      }
+    }
+  </script>
+</body>
+</html>

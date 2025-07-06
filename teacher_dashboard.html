@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Teacher Dashboard | Nsuta Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial; background: #f4f9ff; padding: 30px; max-width: 800px; margin: auto; }
+    h2 { color: #0077cc; margin-bottom: 10px; }
+    .info { margin-bottom: 20px; font-size: 14px; color: #333; }
+    button { display: block; width: 100%; padding: 14px; margin: 10px 0; font-size: 16px; background: #0077cc; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #005fa3; }
+    .logout { background: #ccc; color: #333; }
+    .pin-box { margin-top: 30px; background: #fff; padding: 20px; border-radius: 6px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+    .pin-box input { width: 100%; padding: 10px; margin-top: 8px; font-size: 14px; }
+    .status { margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>👨‍🏫 Welcome, <span id="teacherName">Teacher</span></h2>
+  <div class="info">
+    Username: <strong id="teacherUsername">-</strong><br />
+    Class: <strong id="teacherClass">-</strong>
+  </div>
+
+  <button onclick="navigate('sba-entry.html')">📝 Enter SBA Scores</button>
+  <button onclick="navigate('score-entry.html')">🧮 Enter Exam Scores</button>
+  <button onclick="navigate('assignment-upload.html')">📎 Upload Assignment</button>
+  <button onclick="navigate('exam-submit.html')">📄 Submit Exam Questions</button>
+  <button class="logout" onclick="logout()">🚪 Logout</button>
+
+  <section class="pin-box">
+    <h3>🔑 Change PIN</h3>
+    <label>Current PIN:</label>
+    <input type="password" id="currentPin" placeholder="Enter current PIN" />
+    <label>New PIN (4–6 digits):</label>
+    <input type="password" id="newPin" placeholder="Enter new PIN" maxlength="6" />
+    <button onclick="changePin()">🔄 Update PIN</button>
+    <div class="status" id="pinStatus"></div>
+  </section>
+
+  <script>
+    const supabase = window.supabase.createClient(
+      "https://srdfkpesgvokynhabadi.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyZGZrcGVzZ3Zva3luaGFiYWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3OTgyMTgsImV4cCI6MjA2NzM3NDIxOH0.8YRYisc3Azy1gt0J_lp7xbsuEbaWkHPh5kEdJMuJFl4"
+    );
+
+    const user = JSON.parse(localStorage.getItem("activeUser")) || {};
+    if (!user || user.role !== "teacher") {
+      alert("Access denied.");
+      window.location.href = "index.html";
+    }
+
+    document.getElementById("teacherName").textContent = user.displayName || "Teacher";
+    document.getElementById("teacherUsername").textContent = user.username || "-";
+    document.getElementById("teacherClass").textContent = user.class || "-";
+
+    function navigate(path) {
+      window.location.href = path;
+    }
+
+    function logout() {
+      sessionStorage.clear();
+      localStorage.removeItem("activeUser");
+      location.href = "index.html";
+    }
+
+    async function changePin() {
+      const currentPin = document.getElementById("currentPin").value.trim();
+      const newPin = document.getElementById("newPin").value.trim();
+      const statusBox = document.getElementById("pinStatus");
+
+      if (!currentPin || !newPin) {
+        statusBox.textContent = "❌ Please fill in both fields.";
+        statusBox.style.color = "crimson";
+        return;
+      }
+
+      if (currentPin !== user.pin) {
+        statusBox.textContent = "❌ Current PIN is incorrect.";
+        statusBox.style.color = "crimson";
+        return;
+      }
+
+      if (!/^\d{4,6}$/.test(newPin)) {
+        statusBox.textContent = "❌ New PIN must be 4 to 6 digits.";
+        statusBox.style.color = "crimson";
+        return;
+      }
+
+      const { error } = await supabase
+        .from("users")
+        .update({ pin: newPin })
+        .eq("id", user.id);
+
+      if (error) {
+        statusBox.textContent = "❌ Failed to update PIN.";
+        statusBox.style.color = "crimson";
+      } else {
+        statusBox.textContent = "✅ PIN updated successfully.";
+        statusBox.style.color = "green";
+        user.pin = newPin;
+        localStorage.setItem("activeUser", JSON.stringify(user));
+        document.getElementById("currentPin").value = "";
+        document.getElementById("newPin").value = "";
+      }
+    }
+  </script>
+</body>
+</html>

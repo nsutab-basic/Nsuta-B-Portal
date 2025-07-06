@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Analytics Dashboard | Nsuta Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="guard.js"></script>
+  <style>
+    body { font-family: Arial; background: #f4f9ff; padding: 30px; max-width: 1100px; margin: auto; }
+    h2 { color: #0077cc; margin-bottom: 20px; }
+    section { margin-bottom: 40px; }
+    canvas { max-width: 100%; margin-top: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; font-size: 14px; }
+    th { background-color: #e0ecf9; }
+  </style>
+</head>
+<body>
+  <h2>📊 Analytics Dashboard</h2>
+
+  <section>
+    <h3>📚 Average Score by Subject</h3>
+    <canvas id="subjectChart"></canvas>
+  </section>
+
+  <section>
+    <h3>🏅 Top 5 Students</h3>
+    <table id="topTable">
+      <thead><tr><th>Name</th><th>Class</th><th>Average</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3>⚠️ At-Risk Students (Avg < 50%)</h3>
+    <table id="riskTable">
+      <thead><tr><th>Name</th><th>Class</th><th>Average</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <script>
+    const supabase = window.supabase.createClient(
+      "https://srdfkpesgvokynhabadi.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyZGZrcGVzZ3Zva3luaGFiYWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3OTgyMTgsImV4cCI6MjA2NzM3NDIxOH0.8YRYisc3Azy1gt0J_lp7xbsuEbaWkHPh5kEdJMuJFl4"
+    );
+
+    const term = localStorage.getItem("currentTerm") || "Term 2";
+
+    async function loadAnalytics() {
+      const { data, error } = await supabase
+        .from("merged_scores")
+        .select("*")
+        .eq("term", term);
+
+      if (error || !data || data.length === 0) {
+        alert("⚠️ No data found for analytics.");
+        return;
+      }
+
+      // 📚 Average by Subject
+      const subjectMap = {};
+      data.forEach(row => {
+        if (!subjectMap[row.subject]) subjectMap[row.subject] = [];
+        subjectMap[row.subject].push(row.total);
+      });
+
+      const subjects = Object.keys(subjectMap);
+      const averages = subjects.map(subj => {
+        const scores = subjectMap[subj];
+        return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+      });
+
+      new Chart(document.getElementById("subjectChart"), {
+        type: "bar",
+        data: {
+          labels: subjects,
+          datasets: [{
+            label: "Average Score",
+            data: averages,
+            backgroundColor: "#0077cc"
+          }]
+        },
+        options: {
+          scales: {
+            y: { beginAtZero: true, max: 100 }
+          }
+        }
+      });
+
+      // 🏅 Top 5 Students
+      const studentMap = {};
+      data.forEach(row => {
+        if (!studentMap[row.student_id]) {
+          studentMap[row.student_id] = {
+            name: row.student_name,
+            class: row.class,
+            scores: []
+          };
+        }
+        studentMap[row.student_id].scores.push(row.total);
+      });
+
+      const studentAverages = Object.values(studentMap).map(s => ({
+        name: s.name,
+        class: s.class,
+        avg: (s.scores.reduce((a, b) => a + b, 0) / s.scores.length).toFixed(1)
+      }));
+
+      studentAverages.sort((a, b) => b.avg - a.avg);
+
+      const topTable = document.querySelector("#topTable tbody");
+      topTable.innerHTML = "";
+      studentAverages.slice(0, 5).forEach(s => {
+        topTable.innerHTML += `<tr><td>${s.name}</td><td>${s.class}</td><td>${s.avg}</td></tr>`;
+      });
+
+      // ⚠️ At-Risk Students
+      const riskTable = document.querySelector("#riskTable tbody");
+      riskTable.innerHTML = "";
+      studentAverages.filter(s => s.avg < 50).forEach(s => {
+        riskTable.innerHTML += `<tr><td>${s.name}</td><td>${s.class}</td><td>${s.avg}</td></tr>`;
+      });
+    }
+
+    window.onload = loadAnalytics;
+  </script>
+</body>
+</html>

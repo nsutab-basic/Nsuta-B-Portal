@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Submit Exam Questions | Nsuta Portal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="guard.js"></script>
+  <style>
+    body { font-family: Arial; background: #f9fbff; padding: 30px; max-width: 700px; margin: auto; }
+    h2 { color: #0077cc; margin-bottom: 20px; }
+    label { display: block; margin-top: 15px; font-weight: bold; }
+    input, select, textarea { width: 100%; padding: 10px; margin-top: 5px; font-size: 14px; }
+    textarea { height: 150px; }
+    button { margin-top: 20px; padding: 10px 20px; background: #0077cc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #005fa3; }
+    .status { margin-top: 15px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h2>📄 Submit Exam Questions</h2>
+
+  <label>Class</label>
+  <label for="classSelect">Class</label>
+  <select id="classSelect">
+    <option>JHS1</option>
+    <option>JHS2</option>
+    <option>JHS3</option>
+  </select>
+
+  <label for="subjectSelect">Subject</label>
+  <select id="subjectSelect">
+    <option>Math</option>
+    <option>English</option>
+    <option>Science</option>
+    <option>Computing</option>
+    <option>RME</option>
+    <option>Social Studies</option>
+    <option>Twi</option>
+    <option>Career Tech</option>
+    <option>Creative Art</option>
+  </select>
+
+  <label for="termSelect">Term</label>
+  <select id="termSelect">
+    <option>Term 1</option>
+    <option>Term 2</option>
+    <option>Term 3</option>
+  </select>
+
+  <label for="typeSelect">Type</label>
+  <select id="typeSelect">
+    <option>Midterm</option>
+    <option>End of Term</option>
+  </select>
+
+  <label for="formatSelect">Format</label>
+  <select id="formatSelect">
+    <option value="Text">Text</option>
+    <option value="File">File</option>
+  </select>
+
+  <div id="textSection">
+    <label>Enter Questions</label>
+    <textarea id="contentInput" placeholder="Type your exam questions here..."></textarea>
+  </div>
+
+  <div id="fileSection" style="display:none;">
+    <label>Upload File</label>
+    <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt" />
+  </div>
+
+  <button onclick="submitExam()">✅ Submit for Approval</button>
+  <div class="status" id="statusBox"></div>
+
+  <script>
+    const supabase = window.supabase.createClient(
+      "https://srdfkpesgvokynhabadi.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNyZGZrcGVzZ3Zva3luaGFiYWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE3OTgyMTgsImV4cCI6MjA2NzM3NDIxOH0.8YRYisc3Azy1gt0J_lp7xbsuEbaWkHPh5kEdJMuJFl4"
+    );
+
+    const user = JSON.parse(localStorage.getItem("activeUser")) || {};
+    const statusBox = document.getElementById("statusBox");
+
+    const formatSelect = document.getElementById("formatSelect");
+    const textSection = document.getElementById("textSection");
+    const fileSection = document.getElementById("fileSection");
+
+    formatSelect.addEventListener("change", () => {
+      const format = formatSelect.value;
+      textSection.style.display = format === "Text" ? "block" : "none";
+      fileSection.style.display = format === "File" ? "block" : "none";
+    });
+
+    async function submitExam() {
+      const cls = document.getElementById("classSelect").value;
+      const subject = document.getElementById("subjectSelect").value;
+      const term = document.getElementById("termSelect").value;
+      const type = document.getElementById("typeSelect").value;
+      const format = formatSelect.value;
+      const content = document.getElementById("contentInput").value.trim();
+      const file = document.getElementById("fileInput").files[0];
+
+      statusBox.textContent = "";
+      statusBox.style.color = "black";
+
+      let fileUrl = null;
+
+      if (format === "File") {
+        if (!file) {
+          statusBox.textContent = "❌ Please select a file.";
+          statusBox.style.color = "crimson";
+          return;
+        }
+
+        const path = `${cls}/${Date.now()}_${file.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("exam_files")
+          .upload(path, file);
+
+        if (uploadError) {
+          statusBox.textContent = "❌ File upload failed: " + uploadError.message;
+          statusBox.style.color = "crimson";
+          return;
+        }
+
+        const { data: urlData } = supabase.storage
+          .from("exam_files")
+          .getPublicUrl(path);
+
+        fileUrl = urlData.publicUrl;
+      }
+
+      if (format === "Text" && !content) {
+        statusBox.textContent = "❌ Please enter exam content.";
+        statusBox.style.color = "crimson";
+        return;
+      }
+
+      const { error } = await supabase.from("exam_drafts").insert([{
+        teacher_id: user.id,
+        teacher_name: user.displayName,
+        subject,
+        class: cls,
+        term,
+        type,
+        format,
+        content: format === "Text" ? content : null,
+        file_url: fileUrl,
+        status: "Pending"
+      }]);
+
+      if (error) {
+        statusBox.textContent = "❌ Submission failed: " + error.message;
+        statusBox.style.color = "crimson";
+      } else {
+        statusBox.textContent = "✅ Exam submitted for approval.";
+        statusBox.style.color = "green";
+        document.getElementById("contentInput").value = "";
+        document.getElementById("fileInput").value = "";
+      }
+    }
+  </script>
+</body>
+</html>
